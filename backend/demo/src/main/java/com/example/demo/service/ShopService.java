@@ -6,22 +6,36 @@ import com.example.demo.dto.ShopDto.CheckoutResponse;
 import com.example.demo.dto.ShopDto.ProductResponse;
 import com.example.demo.dto.ShopDto.RegisterRequest;
 import com.example.demo.dto.ShopDto.RegisterResponse;
+import com.example.demo.entity.ProductEntity;
+import com.example.demo.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class ShopService {
 
-    private final List<ProductResponse> products = List.of(
-            new ProductResponse(1L, "Minimal Lamp", BigDecimal.valueOf(24.99), "A clean desk lamp for every room."),
-            new ProductResponse(2L, "Everyday Notebook", BigDecimal.valueOf(12.50), "A simple notebook for notes and lists."),
-            new ProductResponse(3L, "Classic Mug", BigDecimal.valueOf(9.95), "Plain ceramic mug for tea, coffee, or water.")
-    );
+    private final ProductRepository productRepository;
+
+    public ShopService(ProductRepository productRepository) {
+        this.productRepository = productRepository;
+    }
 
     public List<ProductResponse> getProducts() {
-        return products;
+        return productRepository.findAll().stream()
+                .map(this::toProductResponse)
+                .collect(Collectors.toList());
+    }
+
+    private ProductResponse toProductResponse(ProductEntity entity) {
+        return new ProductResponse(
+                entity.getId(),
+                entity.getName(),
+                entity.getPrice(),
+                entity.getDescription()
+        );
     }
 
     public RegisterResponse register(RegisterRequest request) {
