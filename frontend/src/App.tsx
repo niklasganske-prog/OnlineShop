@@ -1,121 +1,148 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
+import CartPanel from './components/CartPanel'
+import ProductGrid from './components/ProductGrid'
+import RegisterForm from './components/RegisterForm'
+import type { CartItem, Product, UserForm } from './types'
+import { checkoutOrder, fetchProducts, registerUser } from './api/shop'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [registered, setRegistered] = useState(false)
+  const [user, setUser] = useState<UserForm>({ name: '', email: '' })
+  const [form, setForm] = useState<UserForm>({ name: '', email: '' })
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [message, setMessage] = useState('')
+  const [orderComplete, setOrderComplete] = useState(false)
+
+  const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0)
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const loadedProducts = await fetchProducts()
+        setProducts(loadedProducts)
+        setMessage('')
+      } catch {
+        setMessage('Unable to load products from the backend.')
+      }
+    })()
+  }, [])
+
+  const formatMoney = (value: number) => `$${value.toFixed(2)}`
+
+  const handleRegisterSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!form.name || !form.email) {
+      setMessage('Enter a name and email to register.')
+      return
+    }
+
+    try {
+      await registerUser(form)
+      setUser(form)
+      setRegistered(true)
+      setMessage(`Welcome, ${form.name}!`)
+      setOrderComplete(false)
+      setCart([])
+    } catch {
+      setMessage('Registration failed. Please try again.')
+    }
+  }
+
+  const handleFormChange = (field: keyof UserForm, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const handleAddToCart = (product: Product) => {
+    setCart((current) => {
+      const existing = current.find((item) => item.id === product.id)
+      if (existing) {
+        return current.map((item) =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
+        )
+      }
+
+      return [...current, { ...product, quantity: 1 }]
+    })
+    setOrderComplete(false)
+    setMessage('')
+  }
+
+  const handleQuantityChange = (productId: number, delta: number) => {
+    setCart((current) =>
+      current
+        .map((item) =>
+          item.id === productId
+            ? { ...item, quantity: Math.max(1, item.quantity + delta) }
+            : item,
+        )
+        .filter((item) => item.quantity > 0),
+    )
+  }
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) {
+      setMessage('Add at least one product to the cart before checkout.')
+      return
+    }
+
+    try {
+      const response = await checkoutOrder({
+        customer: { name: user.name, email: user.email },
+        items: cart.map((item) => ({
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        })),
+      })
+
+      setOrderComplete(true)
+      setMessage(response.message)
+      setCart([])
+    } catch {
+      setMessage('Checkout failed. Please try again.')
+    }
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
+    <div className="app-shell">
+      <header className="app-header">
         <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
+          <h1>Online Shop</h1>
+          <p className="subtitle">A minimal storefront with registration, products, cart, and checkout.</p>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
 
-      <div className="ticks"></div>
+        {registered && <div className="profile">Signed in as {user.name}</div>}
+      </header>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      {!registered ? (
+        <RegisterForm
+          form={form}
+          onChange={handleFormChange}
+          onSubmit={handleRegisterSubmit}
+          message={message}
+        />
+      ) : (
+        <div className="shop-grid">
+          <ProductGrid products={products} onAdd={handleAddToCart} formatMoney={formatMoney} />
+          <CartPanel
+            cart={cart}
+            totalAmount={totalAmount}
+            totalItems={totalItems}
+            onQuantityChange={handleQuantityChange}
+            onCheckout={handleCheckout}
+            message={message}
+            orderComplete={orderComplete}
+            formatMoney={formatMoney}
+          />
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      )}
+    </div>
   )
 }
 
